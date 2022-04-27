@@ -10,6 +10,7 @@ import queue
 import socket
 import time
 import datetime
+from time import sleep 
 
 from .states import States
 from .keys import Keys
@@ -63,12 +64,16 @@ class AquaLogic():
 
         
     def connect(self, host, port):
-        self.connect_socket(host, port)
-
-    def connect_socket(self, host, port):
-        """Connects via a RS-485 to Ethernet adapter."""
+        connected = False
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._socket.connect((host, port))
+        while not connected:  
+            try:  
+                self._socket.connect((host, port))
+                connected = True  
+                _LOGGER.info("Connection Successful")
+            except socket.error:  
+                sleep(5)
+                _LOGGER.error("Retrying to Connect...")
         self._socket.settimeout(self.READ_TIMEOUT)
         self._read = self._read_byte_from_socket
         self._write = self._write_to_socket
@@ -89,11 +94,22 @@ class AquaLogic():
                 _LOGGER.debug('state change successful')
 
     def _read_byte_from_socket(self):
-        data = self._socket.recv(1)
-        return data[0]
+        try:
+            data = self._socket.recv(1)
+            return data[0]
+        except socket.error:
+            host = self._socket.getpeername()[0]
+            port = self._socket.getpeername()[1]
+            self._socket.close()
+            self.connect(host,port)
+            data = self._socket.recv(1)
+            return data[0]
     
     def _write_to_socket(self, data):
-        self._socket.send(data)
+        try:
+            self._socket.send(data)
+        except socket.error:
+            _LOGGER.error("Socket Error Sending Data")
     
     def _send_frame(self):
         if not self._send_queue.empty():
